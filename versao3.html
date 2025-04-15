@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>Editor com Canvas Segmentado + Cursor</title>
+  <style>
+    #editorContainer {
+      width: 800px;
+      height: 500px;
+      overflow-y: scroll;
+      position: relative;
+      border: 1px solid #ccc;
+    }
+
+    .textCanvas {
+      position: absolute;
+      left: 0;
+    }
+  </style>
+</head>
+<body>
+  <!-- renderiza por paginas -->
+  <div id="editorContainer"></div>
+
+  <script>
+    const container = document.getElementById('editorContainer');
+    const lineHeight = 24;
+    const marginLeft = 50;
+    const linesPerCanvas = 100;
+
+    const lines = Array.from({ length: 5000 }, (_, i) =>
+      i === 4 ? "Linha sendo editada aqui..." : `Linha ${i + 1}`
+    );
+
+    const totalHeight = lines.length * lineHeight;
+    const numCanvases = Math.ceil(lines.length / linesPerCanvas);
+    const canvases = [];
+
+    // Estado do cursor
+    let activeLineIndex = 4;
+    let cursorIndex = lines[activeLineIndex].length;
+    let cursorVisible = true;
+    let lastBlink = 0;
+    const blinkInterval = 500;
+
+    function createCanvasBlock(blockIndex) {
+      const startLine = blockIndex * linesPerCanvas;
+      const endLine = Math.min(startLine + linesPerCanvas, lines.length);
+      const canvasHeight = (endLine - startLine) * lineHeight;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = container.clientWidth;
+      canvas.height = canvasHeight;
+      canvas.className = "textCanvas";
+      canvas.style.top = `${startLine * lineHeight}px`;
+
+      const ctx = canvas.getContext("2d");
+      canvases[blockIndex] = { canvas, ctx, startLine, endLine };
+      container.appendChild(canvas);
+
+      drawLinesInCanvas(blockIndex);
+    }
+
+    function drawLinesInCanvas(blockIndex) {
+      const { canvas, ctx, startLine, endLine } = canvases[blockIndex];
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.font = "16px sans-serif";
+      ctx.fillStyle = "black";
+
+      for (let i = startLine; i < endLine; i++) {
+        const text = lines[i];
+        const y = (i - startLine) * lineHeight + 18;
+        ctx.fillText(text, marginLeft, y);
+      }
+
+      if (activeLineIndex >= startLine && activeLineIndex < endLine && cursorVisible) {
+        drawCursor(ctx, startLine);
+      }
+    }
+
+    function drawCursor(ctx, startLine) {
+      const textBeforeCursor = lines[activeLineIndex].slice(0, cursorIndex);
+      const x = marginLeft + ctx.measureText(textBeforeCursor).width;
+      const y = (activeLineIndex - startLine) * lineHeight;
+
+      ctx.beginPath();
+      ctx.moveTo(x, y + 4);
+      ctx.lineTo(x, y + 20);
+      ctx.strokeStyle = "black";
+      ctx.stroke();
+    }
+
+    function refreshCursor() {
+      const block = Math.floor(activeLineIndex / linesPerCanvas);
+      drawLinesInCanvas(block);
+    }
+
+    function renderLoop(timestamp) {
+      if (timestamp - lastBlink > blinkInterval) {
+        cursorVisible = !cursorVisible;
+        refreshCursor();
+        lastBlink = timestamp;
+      }
+      requestAnimationFrame(renderLoop);
+    }
+
+    requestAnimationFrame(renderLoop);
+
+    // Criar todos os blocos
+    for (let block = 0; block < numCanvases; block++) {
+      createCanvasBlock(block);
+    }
+
+    // Spacer para scroll funcionar corretamente
+    const spacer = document.createElement('div');
+    spacer.style.height = `${totalHeight}px`;
+    spacer.style.width = "1px";
+    container.appendChild(spacer);
+
+    // Controle do teclado (simples por enquanto)
+    document.addEventListener('keydown', (e) => {
+      if (e.key === "ArrowLeft") {
+        if (cursorIndex > 0) {
+          cursorIndex--;
+        } else if (activeLineIndex > 0) {
+          activeLineIndex--;
+          cursorIndex = lines[activeLineIndex].length;
+        }
+        refreshCursor();
+      } else if (e.key === "ArrowRight") {
+        if (cursorIndex < lines[activeLineIndex].length) {
+          cursorIndex++;
+        } else if (activeLineIndex < lines.length - 1) {
+          activeLineIndex++;
+          cursorIndex = 0;
+        }
+        refreshCursor();
+      } else if (e.key === "ArrowUp") {
+        if (activeLineIndex > 0) {
+          activeLineIndex--;
+          cursorIndex = Math.min(cursorIndex, lines[activeLineIndex].length);
+          refreshCursor();
+        }
+      } else if (e.key === "ArrowDown") {
+        if (activeLineIndex < lines.length - 1) {
+          activeLineIndex++;
+          cursorIndex = Math.min(cursorIndex, lines[activeLineIndex].length);
+          refreshCursor();
+        }
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,207 @@
+﻿<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Editor com Scroll Virtual</title>
+  <style>
+    #editorContainer {
+      width: 800px;
+      height: 480px;
+      overflow-y: scroll;
+      position: relative;
+      border: 1px solid #ccc;
+    }
+    canvas {
+      position: absolute;
+      left: 0;
+      top: 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="editorContainer">
+    <!-- renderiza uma coisa so mas ta com problema para renderizar linhas seguintes por causa do scroll -->
+    <div id="spacer" style="height: 120000px;"></div>
+	<canvas id="canvas" width="800" height="480"></canvas>
+  </div>
+
+  <script>
+    const container = document.getElementById('editorContainer');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    const lineHeight = 24;
+    const marginLeft = 50;
+
+    const lines = Array.from({ length: 5000 }, (_, i) =>
+      i === 4 ? "Linha sendo editada aqui..." : `Linha ${i + 1}`
+    );
+
+    let activeLineIndex = 4;
+    let activeText = lines[activeLineIndex];
+    let cursorIndex = activeText.length;
+
+    let scrollTop = 0;
+    let visibleHeight = container.clientHeight;
+
+    //// Ajusta a altura do canvas para o número total de linhas
+    //canvas.height = lines.length * lineHeight;
+    // Define a altura do canvas com base na altura visível do contêiner
+    canvas.height = visibleHeight;
+
+    function resizeCanvasIfNeeded() {
+      // O canvas não precisa ajustar sua altura com base no número total de linhas
+      // Apenas a largura é ajustada para o contêiner
+      canvas.width = container.clientWidth;
+    }
+
+    let cursorVisible = true;
+    let cursorX = 0;
+    let cursorY = 0;
+    let lastBlink = 0;
+    const blinkInterval = 500;
+
+    function updateCursorPosition() {
+      const before = activeText.slice(0, cursorIndex);
+      cursorX = marginLeft + ctx.measureText(before).width;
+      cursorY = lineHeight * activeLineIndex;
+    }
+
+    function refreshCursor() {
+      updateCursorPosition();
+      drawCursor(true);
+      cursorVisible = true;
+      lastBlink = performance.now();
+    }
+
+    function drawCursor(forceVisible = null) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawVisibleLines();
+
+      const visible = forceVisible !== null ? forceVisible : cursorVisible;
+      if (visible) {
+        ctx.beginPath();
+        ctx.moveTo(cursorX, cursorY + 4);
+        ctx.lineTo(cursorX, cursorY + 20);
+        ctx.strokeStyle = "black";
+        ctx.stroke();
+      }
+    }
+
+    function drawVisibleLines() {
+      const firstVisibleLine = Math.floor(scrollTop / lineHeight);
+      const lastVisibleLine = Math.min(
+        lines.length,
+        Math.ceil((scrollTop + visibleHeight) / lineHeight)
+      );
+
+      ctx.font = "16px sans-serif";
+      ctx.fillStyle = "black";
+
+      for (let i = firstVisibleLine; i < lastVisibleLine; i++) {
+        const y = (i * lineHeight) - scrollTop;
+        const text = i === activeLineIndex ? activeText : lines[i];
+
+        if (typeof text === 'string') {
+          try {
+            ctx.fillText(text, marginLeft, y);
+          } catch (err) {
+            console.error("Erro ao desenhar texto no canvas:", err.message, text);
+          }
+        } else {
+          console.warn("Linha inválida detectada:", i, text);
+        }
+      }
+    }
+
+    function renderLoop(timestamp) {
+      if (timestamp - lastBlink >= blinkInterval) {
+        cursorVisible = !cursorVisible;
+        drawCursor();
+        lastBlink = timestamp;
+      }
+      requestAnimationFrame(renderLoop);
+    }
+
+    requestAnimationFrame(renderLoop);
+
+    container.addEventListener('scroll', () => {
+      scrollTop = container.scrollTop;
+      drawCursor(true);
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (
+        ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Backspace", "Enter"].includes(e.key)
+      ) {
+        e.preventDefault();
+      }
+
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+        activeText =
+          activeText.slice(0, cursorIndex) + e.key + activeText.slice(cursorIndex);
+        cursorIndex++;
+        lines[activeLineIndex] = activeText;
+        resizeCanvasIfNeeded(); // Chama para ajustar o tamanho do canvas
+        refreshCursor();
+      } else if (e.key === "Backspace") {
+        if (cursorIndex > 0) {
+          activeText =
+            activeText.slice(0, cursorIndex - 1) + activeText.slice(cursorIndex);
+          cursorIndex--;
+          lines[activeLineIndex] = activeText;
+          resizeCanvasIfNeeded(); // Chama para ajustar o tamanho do canvas
+          refreshCursor();
+        }
+      } else if (e.key === "Enter") {
+        const before = activeText.slice(0, cursorIndex);
+        const after = activeText.slice(cursorIndex);
+        lines.splice(activeLineIndex, 1, before, after);
+        activeLineIndex++;
+        activeText = after;
+        cursorIndex = 0;
+        resizeCanvasIfNeeded(); // Chama para ajustar o tamanho do canvas
+        refreshCursor();
+      } else if (e.key === "ArrowUp") {
+        if (activeLineIndex > 0) {
+          lines[activeLineIndex] = activeText;
+          activeLineIndex--;
+          activeText = lines[activeLineIndex];
+          cursorIndex = Math.min(cursorIndex, activeText.length);
+          refreshCursor();
+        }
+      } else if (e.key === "ArrowDown") {
+        if (activeLineIndex < lines.length - 1) {
+          lines[activeLineIndex] = activeText;
+          activeLineIndex++;
+          activeText = lines[activeLineIndex];
+          cursorIndex = Math.min(cursorIndex, activeText.length);
+          refreshCursor();
+        }
+      } else if (e.key === "ArrowLeft") {
+        if (cursorIndex > 0) {
+          cursorIndex--;
+          refreshCursor();
+        } else if (activeLineIndex > 0) {
+          lines[activeLineIndex] = activeText;
+          activeLineIndex--;
+          activeText = lines[activeLineIndex];
+          cursorIndex = activeText.length;
+          refreshCursor();
+        }
+      } else if (e.key === "ArrowRight") {
+        if (cursorIndex < activeText.length) {
+          cursorIndex++;
+          refreshCursor();
+        } else if (activeLineIndex < lines.length - 1) {
+          lines[activeLineIndex] = activeText;
+          activeLineIndex++;
+          activeText = lines[activeLineIndex];
+          cursorIndex = 0;
+          refreshCursor();
+        }
+      }
+    });
+  </script>
+</body>
+</html>

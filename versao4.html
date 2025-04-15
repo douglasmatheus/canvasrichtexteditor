@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>Editor Canvas Segmentado</title>
+  <style>
+    #editorContainer {
+      width: 800px;
+      height: 500px;
+      overflow-y: scroll;
+      border: 1px solid #ccc;
+      position: relative;
+    }
+    .lineCanvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <!-- renderiza por linhas e suporta edicao de texto e cursor -->
+  <div id="editorContainer"></div>
+
+  <script>
+    const container = document.getElementById('editorContainer');
+
+    const lineHeight = 24;
+    const font = "16px sans-serif";
+    const marginLeft = 10;
+    const lines = Array.from({ length: 1000 }, (_, i) =>
+      i === 4 ? "Linha sendo editada aqui..." : `Linha ${i + 1}`
+    );
+
+    let activeLineIndex = 4;
+    let previousActiveLineIndex = activeLineIndex;
+    let cursorIndex = lines[activeLineIndex].length;
+
+    let cursorX = 0;
+    let cursorVisible = true;
+    let lastBlink = performance.now();
+    const blinkInterval = 500;
+
+    const canvases = [];
+
+    function createCanvasForLine(index) {
+      const canvas = document.createElement('canvas');
+      canvas.width = container.clientWidth;
+      canvas.height = lineHeight;
+      canvas.className = 'lineCanvas';
+      container.appendChild(canvas);
+      canvases.push(canvas);
+      drawLine(index);
+    }
+
+    function drawLine(index) {
+      const canvas = canvases[index];
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.font = font;
+      ctx.fillStyle = "black";
+      ctx.fillText(lines[index], marginLeft, lineHeight * 0.75);
+    }
+
+    function updateCursorPosition() {
+      const ctx = canvases[activeLineIndex].getContext('2d');
+      ctx.font = font;
+      const beforeText = lines[activeLineIndex].slice(0, cursorIndex);
+      cursorX = marginLeft + ctx.measureText(beforeText).width;
+    }
+
+    function drawCursor(forceVisible = null) {
+  // Limpa o canvas da linha anterior antes de desenhar a nova linha
+  if (activeLineIndex !== previousActiveLineIndex) {
+    drawLine(previousActiveLineIndex); // Redesenha a linha anterior sem o cursor
+  }
+
+  // Desenha a linha atual (onde o cursor deve aparecer)
+  drawLine(activeLineIndex);
+    const ctx = canvases[activeLineIndex].getContext('2d');
+    const visible = forceVisible !== null ? forceVisible : cursorVisible;
+    if (visible) {
+      ctx.beginPath();
+      ctx.moveTo(cursorX, 4);
+      ctx.lineTo(cursorX, lineHeight - 4);
+      ctx.strokeStyle = "black";
+      ctx.stroke();
+    }
+
+    // Atualiza o índice da linha ativa
+    previousActiveLineIndex = activeLineIndex;
+  }
+
+    function refreshCursor() {
+      updateCursorPosition();
+      drawCursor(true);
+      cursorVisible = true;
+      lastBlink = performance.now();
+    }
+
+    function renderLoop(timestamp) {
+      if (timestamp - lastBlink >= blinkInterval) {
+        cursorVisible = !cursorVisible;
+        drawCursor();
+        lastBlink = timestamp;
+      }
+      requestAnimationFrame(renderLoop);
+    }
+
+    function init() {
+      for (let i = 0; i < lines.length; i++) {
+        createCanvasForLine(i);
+      }
+      refreshCursor();
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (
+        ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Backspace", "Enter"].includes(e.key)
+      ) {
+        e.preventDefault();
+      }
+
+      let currentLine = lines[activeLineIndex];
+
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+        const newText = currentLine.slice(0, cursorIndex) + e.key + currentLine.slice(cursorIndex);
+        lines[activeLineIndex] = newText;
+        cursorIndex++;
+        drawLine(activeLineIndex);
+        refreshCursor();
+      } else if (e.key === "Backspace") {
+        if (cursorIndex > 0) {
+          lines[activeLineIndex] =
+            currentLine.slice(0, cursorIndex - 1) + currentLine.slice(cursorIndex);
+          cursorIndex--;
+          drawLine(activeLineIndex);
+          refreshCursor();
+        }
+      } else if (e.key === "Enter") {
+        const before = currentLine.slice(0, cursorIndex);
+        const after = currentLine.slice(cursorIndex);
+        lines.splice(activeLineIndex, 1, before, after);
+        cursorIndex = 0;
+        activeLineIndex++;
+        const canvas = document.createElement('canvas');
+        canvas.width = container.clientWidth;
+        canvas.height = lineHeight;
+        canvas.className = 'lineCanvas';
+        container.insertBefore(canvas, canvases[activeLineIndex]);
+        canvases.splice(activeLineIndex, 0, canvas);
+        drawLine(activeLineIndex - 1);
+        drawLine(activeLineIndex);
+        refreshCursor();
+      } else if (e.key === "ArrowUp" && activeLineIndex > 0) {
+        activeLineIndex--;
+        cursorIndex = Math.min(cursorIndex, lines[activeLineIndex].length);
+        refreshCursor();
+      } else if (e.key === "ArrowDown" && activeLineIndex < lines.length - 1) {
+        activeLineIndex++;
+        cursorIndex = Math.min(cursorIndex, lines[activeLineIndex].length);
+        refreshCursor();
+      } else if (e.key === "ArrowLeft") {
+        if (cursorIndex > 0) {
+          cursorIndex--;
+        } else if (activeLineIndex > 0) {
+          activeLineIndex--;
+          cursorIndex = lines[activeLineIndex].length;
+        }
+        refreshCursor();
+      } else if (e.key === "ArrowRight") {
+        if (cursorIndex < lines[activeLineIndex].length) {
+          cursorIndex++;
+        } else if (activeLineIndex < lines.length - 1) {
+          activeLineIndex++;
+          cursorIndex = 0;
+        }
+        refreshCursor();
+      }
+    });
+
+    init();
+    requestAnimationFrame(renderLoop);
+  </script>
+</body>
+</html>
