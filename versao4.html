@@ -26,7 +26,7 @@
     const lineHeight = 24;
     const font = "16px sans-serif";
     const marginLeft = 10;
-    const lines = Array.from({ length: 1000 }, (_, i) =>
+    const lines = Array.from({ length: 10000 }, (_, i) =>
       i === 4 ? "Linha sendo editada aqui..." : `Linha ${i + 1}`
     );
 
@@ -42,17 +42,24 @@
     const canvases = [];
 
     function createCanvasForLine(index) {
+      if (canvases[index]) return; // já existe
+
       const canvas = document.createElement('canvas');
       canvas.width = container.clientWidth;
       canvas.height = lineHeight;
       canvas.className = 'lineCanvas';
+      canvas.style.position = "absolute";
+      canvas.style.top = `${index * lineHeight}px`;
+
       container.appendChild(canvas);
-      canvases.push(canvas);
+      canvases[index] = canvas;
+
       drawLine(index);
     }
 
     function drawLine(index) {
       const canvas = canvases[index];
+      if (!canvas) return; // canvas não existe
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.font = font;
@@ -68,26 +75,27 @@
     }
 
     function drawCursor(forceVisible = null) {
-  // Limpa o canvas da linha anterior antes de desenhar a nova linha
-  if (activeLineIndex !== previousActiveLineIndex) {
-    drawLine(previousActiveLineIndex); // Redesenha a linha anterior sem o cursor
-  }
+      // Limpa o canvas da linha anterior antes de desenhar a nova linha
+      if (activeLineIndex !== previousActiveLineIndex) {
+        drawLine(previousActiveLineIndex); // Redesenha a linha anterior sem o cursor
+      }
 
-  // Desenha a linha atual (onde o cursor deve aparecer)
-  drawLine(activeLineIndex);
-    const ctx = canvases[activeLineIndex].getContext('2d');
-    const visible = forceVisible !== null ? forceVisible : cursorVisible;
-    if (visible) {
-      ctx.beginPath();
-      ctx.moveTo(cursorX, 4);
-      ctx.lineTo(cursorX, lineHeight - 4);
-      ctx.strokeStyle = "black";
-      ctx.stroke();
+      // Desenha a linha atual (onde o cursor deve aparecer)
+      drawLine(activeLineIndex);
+      if (!canvases[activeLineIndex]) return; // canvas não existe
+      const ctx = canvases[activeLineIndex].getContext('2d');
+      const visible = forceVisible !== null ? forceVisible : cursorVisible;
+      if (visible) {
+        ctx.beginPath();
+        ctx.moveTo(cursorX, 4);
+        ctx.lineTo(cursorX, lineHeight - 4);
+        ctx.strokeStyle = "black";
+        ctx.stroke();
+      }
+
+      // Atualiza o índice da linha ativa
+      previousActiveLineIndex = activeLineIndex;
     }
-
-    // Atualiza o índice da linha ativa
-    previousActiveLineIndex = activeLineIndex;
-  }
 
     function refreshCursor() {
       updateCursorPosition();
@@ -106,10 +114,29 @@
     }
 
     function init() {
-      for (let i = 0; i < lines.length; i++) {
+      // Cria o spacer para forçar o scroll
+      const spacer = document.createElement("div");
+      spacer.style.height = `${lines.length * lineHeight}px`;
+      container.appendChild(spacer);
+
+      // Cria os canvases visíveis inicialmente
+      const [first, last] = getVisibleLineRange();
+      for (let i = first; i <= last; i++) {
         createCanvasForLine(i);
       }
+
       refreshCursor();
+    }
+
+
+    function getVisibleLineRange() {
+      const scrollTop = container.scrollTop;
+      const visibleHeight = container.clientHeight;
+
+      const firstVisible = Math.floor(scrollTop / lineHeight);
+      const lastVisible = Math.min(lines.length - 1, Math.ceil((scrollTop + visibleHeight) / lineHeight));
+
+      return [firstVisible, lastVisible];
     }
 
     document.addEventListener('keydown', (e) => {
@@ -176,6 +203,23 @@
         refreshCursor();
       }
     });
+
+    container.addEventListener("scroll", handleScroll);
+
+    function handleScroll() {
+      const [first, last] = getVisibleLineRange();
+      for (let i = first; i <= last; i++) {
+        createCanvasForLine(i);
+      }
+
+      // Opcional: remover canvases fora da janela visível para economizar memória
+      for (let i = 0; i < canvases.length; i++) {
+        if (canvases[i] && (i < first || i > last)) {
+          canvases[i].remove();
+          canvases[i] = null;
+        }
+      }
+    }
 
     init();
     requestAnimationFrame(renderLoop);
