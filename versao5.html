@@ -29,7 +29,6 @@
     const lines = Array.from({ length: 10000 }, (_, i) =>
       i === 4 ? "Linha sendo editada aqui..." : `Linha ${i + 1}`
     );
-    const canvasPool = [];
 
     let activeLineIndex = 4;
     let previousActiveLineIndex = activeLineIndex;
@@ -41,17 +40,27 @@
     const blinkInterval = 500;
 
     const canvases = [];
+    const canvasPool = [];
+    function getCanvasFromPoolOrCreate() {
+      return canvasPool.length > 0
+        ? canvasPool.pop()
+        : document.createElement('canvas');
+    }
 
     function createCanvasForLine(index) {
-      if (canvases[index]) return; // já existe
+      if (canvases[index]) return;
 
-      const canvas = document.createElement('canvas');
-      canvas.width = container.clientWidth;
-      canvas.height = lineHeight;
-      canvas.className = 'lineCanvas';
-      canvas.style.position = "absolute";
+      // Tenta reutilizar um canvas do pool
+      let canvas = canvasPool.pop();
+      if (!canvas) {
+        canvas = document.createElement('canvas');
+        canvas.width = container.clientWidth;
+        canvas.height = lineHeight;
+        canvas.className = 'lineCanvas';
+        canvas.style.position = 'absolute';
+      }
+
       canvas.style.top = `${index * lineHeight}px`;
-
       container.appendChild(canvas);
       canvases[index] = canvas;
 
@@ -60,7 +69,7 @@
 
     function drawLine(index) {
       const canvas = canvases[index];
-      if (!canvas) return; // canvas não existe
+      if (!canvas) return; // canvas não existe, evita erro
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.font = font;
@@ -76,6 +85,7 @@
     }
 
     function drawCursor(forceVisible = null) {
+      if (!canvases[activeLineIndex]) return; // Garantir que o canvas existe
       // Limpa o canvas da linha anterior antes de desenhar a nova linha
       if (activeLineIndex !== previousActiveLineIndex) {
         drawLine(previousActiveLineIndex); // Redesenha a linha anterior sem o cursor
@@ -83,7 +93,7 @@
 
       // Desenha a linha atual (onde o cursor deve aparecer)
       drawLine(activeLineIndex);
-      if (!canvases[activeLineIndex]) return; // canvas não existe
+
       const ctx = canvases[activeLineIndex].getContext('2d');
       const visible = forceVisible !== null ? forceVisible : cursorVisible;
       if (visible) {
@@ -153,30 +163,71 @@
         const newText = currentLine.slice(0, cursorIndex) + e.key + currentLine.slice(cursorIndex);
         lines[activeLineIndex] = newText;
         cursorIndex++;
-        drawLine(activeLineIndex);
+        drawLine(activeLineIndex); // Desenha apenas a linha editada
         refreshCursor();
       } else if (e.key === "Backspace") {
+        let currentLine = lines[activeLineIndex];
+
         if (cursorIndex > 0) {
           lines[activeLineIndex] =
             currentLine.slice(0, cursorIndex - 1) + currentLine.slice(cursorIndex);
           cursorIndex--;
           drawLine(activeLineIndex);
           refreshCursor();
+        } else if (activeLineIndex > 0) {
+          // Mescla com a linha anterior
+          const previousLine = lines[activeLineIndex - 1];
+          const mergedLine = previousLine + currentLine;
+
+          // Atualiza a lista de linhas
+          lines.splice(activeLineIndex - 1, 2, mergedLine);
+
+          // Remove o canvas da linha atual e retorna pro pool
+          const canvasToRemove = canvases[activeLineIndex];
+          if (canvasToRemove) {
+            container.removeChild(canvasToRemove);
+            canvasPool.push(canvasToRemove);
+          }
+          canvases.splice(activeLineIndex, 1);
+
+          // Atualiza os índices
+          activeLineIndex--;
+          cursorIndex = previousLine.length;
+
+          updateCanvasPositionsFromIndex(activeLineIndex);
+          drawLine(activeLineIndex);
+          refreshCursor();
         }
       } else if (e.key === "Enter") {
         const before = currentLine.slice(0, cursorIndex);
         const after = currentLine.slice(cursorIndex);
+
+        // Atualiza as linhas
         lines.splice(activeLineIndex, 1, before, after);
-        cursorIndex = 0;
+
+        // Pega um canvas do pool ou cria novo
+        const newCanvas = getCanvasFromPoolOrCreate();
+        newCanvas.width = container.clientWidth;
+        newCanvas.height = lineHeight;
+        newCanvas.className = "lineCanvas";
+        newCanvas.style.position = "absolute";
+
+        // Atualiza lista de canvases
+        canvases.splice(activeLineIndex + 1, 0, newCanvas);
+
+        // Insere no DOM na posição correta
+        const nextCanvas = canvases[activeLineIndex + 2];
+        if (nextCanvas && nextCanvas.parentElement === container) {
+          container.insertBefore(newCanvas, nextCanvas);
+        } else {
+          container.appendChild(newCanvas);
+        }
+
         activeLineIndex++;
-        const canvas = document.createElement('canvas');
-        canvas.width = container.clientWidth;
-        canvas.height = lineHeight;
-        canvas.className = 'lineCanvas';
-        container.insertBefore(canvas, canvases[activeLineIndex]);
-        canvases.splice(activeLineIndex, 0, canvas);
-        drawLine(activeLineIndex - 1);
-        drawLine(activeLineIndex);
+        cursorIndex = 0;
+
+        // Atualiza as posições visuais de todos os canvases a partir da linha anterior
+        updateCanvasPositionsFromIndex(activeLineIndex - 1);
         refreshCursor();
       } else if (e.key === "ArrowUp" && activeLineIndex > 0) {
         activeLineIndex--;
@@ -207,16 +258,27 @@
 
     container.addEventListener("scroll", handleScroll);
 
+    function updateCanvasPositionsFromIndex(startIndex) {
+      for (let i = startIndex; i < canvases.length; i++) {
+        const canvas = canvases[i];
+        if (canvas) {
+          canvas.style.top = `${i * lineHeight}px`;
+          drawLine(i);
+        }
+      }
+    }
+
     function handleScroll() {
       const [first, last] = getVisibleLineRange();
       for (let i = first; i <= last; i++) {
         createCanvasForLine(i);
       }
 
-      // Opcional: remover canvases fora da janela visível para economizar memória
       for (let i = 0; i < canvases.length; i++) {
         if (canvases[i] && (i < first || i > last)) {
-          canvases[i].remove();
+          const canvas = canvases[i];
+          canvas.remove();
+          canvasPool.push(canvas); // guarda para reutilização
           canvases[i] = null;
         }
       }
