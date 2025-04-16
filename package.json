@@ -1,0 +1,28 @@
+{
+  "name": "canvas-rich-text-editor",
+  "author": "Douglas https://github.com/douglasmatheus",
+  "version": "1.0.0",
+  "description": "Editor de texto com canvas segmentado",
+  "main": "src/index.js",
+  "type": "module",
+  "exports": {
+    "import": "./dist/canvas-rich-text-editor.js",
+    "require": "./dist/canvas-rich-text-editor.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "start": "webpack serve --config webpack.config.js",
+    "build": "webpack --config webpack.config.js"
+  },
+  "keywords": [],
+  "license": "ISC",
+  "dependencies": {},
+  "devDependencies": {
+    "@babel/core": "^7.23.0",
+    "@babel/preset-env": "^7.23.0",
+    "babel-loader": "^9.1.3",
+    "webpack": "^5.88.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.0"
+  }
+}
