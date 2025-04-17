@@ -1,6 +1,6 @@
-import { createCanvasForLine, drawLine, removeCanvas } from './editorCanvas';
-import { getVisibleLineRange } from './utils';
-import { lines } from './editorState';
+import { createCanvasForLine, drawLine, removeCanvas } from './editorCanvas.js';
+import { getVisibleLineRange } from './utils.js';
+import { lines } from './editorState.js';
 
 let lastRenderedRange = [null, null];
 

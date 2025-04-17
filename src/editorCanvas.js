@@ -1,6 +1,6 @@
-import { lines, activeLineIndex, cursorIndex } from './editorState';
-import { getCanvas, releaseCanvas } from './canvasPool';
-import { lineHeight, font, marginLeft } from './editorState';
+import { lines, activeLineIndex, cursorIndex } from './editorState.js';
+import { getCanvas, releaseCanvas } from './canvasPool.js';
+import { lineHeight, font, marginLeft } from './editorState.js';
 
 const canvasMap = new Map(); // Relaciona índices de linha com seus canvases
 

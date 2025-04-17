@@ -1,13 +1,12 @@
 import './styles.css';
 
-import { renderVisibleLines, updateLine } from './render';
-import { getVisibleLineRange } from './utils';
-import { lines, activeLineIndex, cursorIndex, setActiveLineIndex, setCursorIndex, getLineHeight } from './editorState';
-import { createCanvasForLine, drawCursor, updateCursorPosition } from './editorCanvas';
+import { renderVisibleLines, updateLine } from './render.js';
+import { lines, activeLineIndex, cursorIndex, setActiveLineIndex, setCursorIndex, lineHeight } from './editorState.js';
+import { createCanvasForLine, drawCursor, updateCursorPosition } from './editorCanvas.js';
 
-export function initEditor(container) {
+function initEditor(container) {
   const spacer = document.createElement("div");
-  spacer.style.height = `${lines.length * getLineHeight()}px`; // Usando o lineHeight de editorState
+  spacer.style.height = `${lines.length * lineHeight}px`; // Usando o lineHeight de editorState
   container.appendChild(spacer);
 
   renderVisibleLines();
@@ -128,3 +127,5 @@ function refreshCursor() {
   updateCursorPosition();
   drawCursor(true);
 }
+
+export { initEditor };

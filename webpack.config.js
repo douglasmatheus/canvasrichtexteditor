@@ -5,14 +5,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default {
   mode: 'development', // Alterar para 'production' em produção
-  entry: './src/initEditor.js',
+  entry: './src/inndex.js',
   output: {
     filename: 'canvas-rich-text-editor.js', // Nome do arquivo final
     path: path.resolve(__dirname, 'dist'),
     clean: true,
     library: {
       name: 'CanvasRichTextEditor', // Nome da biblioteca
-      type: 'umd', // Universal Module Definition (compatível com AMD, CommonJS, e também exportação global)
+      type: 'module',
     },
   },
   devServer: {
