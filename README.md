@@ -24,28 +24,33 @@ The editor is designed to be highly performant when dealing with large documents
 ### Installation Steps
 
 1. Clone this repository:
-   ```bash```
-   ```git clone https://github.com/douglasmatheus/canvas-rich-text-editor.git```
+```bash
+git clone https://github.com/douglasmatheus/canvas-rich-text-editor.git
+```
 
 2. Navigate to the project directory:
-  ```cd canvas-rich-text-editor```
+```bash
+cd canvas-rich-text-editor
+```
 
 3. Install the dependencies:
-  ```npm install```
+```bash
+npm install
+```
 
 
 Usage
 Start the development server
 
 To test the editor locally, use the Webpack development server:
-```
+```bash
 npm start
 ```
 The server will be available at http://localhost:3000, where you can interact with the editor.
 Using the library
 
 The library can be imported into your project as follows:
-```
+```javascript
 import { initEditor } from 'canvas-rich-text-editor';
 
 // Initialize the editor in an HTML container
