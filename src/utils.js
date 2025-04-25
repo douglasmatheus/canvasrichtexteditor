@@ -1,3 +1,5 @@
+import { editorContainer } from './editorState.js';
+
 /**
  * Retorna o intervalo de linhas visíveis no container com scroll.
  * @param {HTMLElement} container - O container do editor com scroll.
@@ -6,7 +8,8 @@
  * @returns {[number, number]} Índices da primeira e última linha visível.
  */
 export function getVisibleLineRange(container, lineHeight, totalLines) {
-  const scrollTop = container.scrollTop;
+  if (!container) return [0, 0];
+  const scrollTop = container?.scrollTop ?? 0;
   const visibleHeight = container.clientHeight;
 
   const firstVisible = Math.floor(scrollTop / lineHeight);

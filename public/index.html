@@ -6,11 +6,12 @@
   </head>
   <body>
     <div id="editorContainer"></div>
-    <script type="module">
-      import { initEditor } from './canvas-rich-text-editor.js';
+    <script src="/canvas-rich-text-editor.js"></script>
+    <script>
+      // import { initEditor } from './canvas-rich-text-editor.js';
 
       const container = document.getElementById('editorContainer');
-      initEditor(container);
+      CanvasRichTextEditor.initEditor(container);
     </script>
   </body>
 </html>

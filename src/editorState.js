@@ -1,6 +1,7 @@
 export const lineHeight = 24;
 export const font = "16px sans-serif";
 export const marginLeft = 10;
+export let editorContainer = null;
 
 export const lines = {
   value: Array.from({ length: 1000 }, (_, i) =>
@@ -28,4 +29,8 @@ export function setActiveLineIndex(index) {
 
 export function setCursorIndex(index) {
   cursorIndex.value = index;
+}
+
+export function setEditorContainer(el) {
+  editorContainer = el;
 }

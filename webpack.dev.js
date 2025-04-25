@@ -12,6 +12,11 @@ export default {
     path: path.resolve(__dirname, 'dist'),
     filename: 'canvas-rich-text-editor.js',
     clean: true,
+    library: 'CanvasRichTextEditor',
+    libraryTarget: 'window', // <- compatível com navegador direto
+  },
+  experiments: {
+    outputModule: true,
   },
   devServer: {
     static: [

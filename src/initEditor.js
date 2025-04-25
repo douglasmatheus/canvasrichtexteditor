@@ -1,15 +1,17 @@
 import './styles.css';
 
 import { renderVisibleLines, updateLine } from './render.js';
-import { lines, activeLineIndex, cursorIndex, setActiveLineIndex, setCursorIndex, lineHeight } from './editorState.js';
+import { lines, activeLineIndex, cursorIndex, setActiveLineIndex, setEditorContainer, setCursorIndex, lineHeight } from './editorState.js';
 import { createCanvasForLine, drawCursor, updateCursorPosition } from './editorCanvas.js';
 
 function initEditor(container) {
+  setEditorContainer(container);
   const spacer = document.createElement("div");
-  spacer.style.height = `${lines.length * lineHeight}px`; // Usando o lineHeight de editorState
+  spacer.style.height = `${lines.value.length * lineHeight}px`; // Usando o lineHeight de editorState
   container.appendChild(spacer);
 
-  renderVisibleLines();
+  const totalLines = lines.value.length;
+  renderVisibleLines(container, lineHeight, totalLines);
   refreshCursor();
 
   container.addEventListener("scroll", renderVisibleLines);

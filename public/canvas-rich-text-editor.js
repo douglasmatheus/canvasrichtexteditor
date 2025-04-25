@@ -503,6 +503,7 @@ var update = injectStylesIntoStyleTag_default()(styles/* default */.A, options);
 var lineHeight = 24;
 var font = "16px sans-serif";
 var marginLeft = 10;
+var editorContainer = null;
 var lines = {
   value: Array.from({
     length: 1000
@@ -527,6 +528,9 @@ function setActiveLineIndex(index) {
 }
 function setCursorIndex(index) {
   cursorIndex.value = index;
+}
+function setEditorContainer(el) {
+  editorContainer = el;
 }
 ;// ./src/canvasPool.js
 var pool = [];
@@ -612,6 +616,8 @@ function updateCursorPosition() {
   // Se quiser usar um elemento separado futuramente, esse método pode ser útil
 }
 ;// ./src/utils.js
+
+
 /**
  * Retorna o intervalo de linhas visíveis no container com scroll.
  * @param {HTMLElement} container - O container do editor com scroll.
@@ -620,7 +626,9 @@ function updateCursorPosition() {
  * @returns {[number, number]} Índices da primeira e última linha visível.
  */
 function getVisibleLineRange(container, lineHeight, totalLines) {
-  var scrollTop = container.scrollTop;
+  var _container$scrollTop;
+  if (!container) return [0, 0];
+  var scrollTop = (_container$scrollTop = container === null || container === void 0 ? void 0 : container.scrollTop) !== null && _container$scrollTop !== void 0 ? _container$scrollTop : 0;
   var visibleHeight = container.clientHeight;
   var firstVisible = Math.floor(scrollTop / lineHeight);
   var lastVisible = Math.min(totalLines - 1, Math.ceil((scrollTop + visibleHeight) / lineHeight));
@@ -637,8 +645,8 @@ function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
 
 
 var lastRenderedRange = [null, null];
-function renderVisibleLines(container) {
-  var _getVisibleLineRange = getVisibleLineRange(container),
+function renderVisibleLines(container, lineHeight, totalLines) {
+  var _getVisibleLineRange = getVisibleLineRange(container, lineHeight, totalLines),
     _getVisibleLineRange2 = _slicedToArray(_getVisibleLineRange, 2),
     first = _getVisibleLineRange2[0],
     last = _getVisibleLineRange2[1];
@@ -662,10 +670,12 @@ function updateLine(index) {
 
 
 function initEditor(container) {
+  setEditorContainer(container);
   var spacer = document.createElement("div");
   spacer.style.height = "".concat(lines.length * lineHeight, "px"); // Usando o lineHeight de editorState
   container.appendChild(spacer);
-  renderVisibleLines();
+  var totalLines = lines.value.length;
+  renderVisibleLines(container, lineHeight, totalLines);
   refreshCursor();
   container.addEventListener("scroll", renderVisibleLines);
   document.addEventListener("keydown", handleKeyDown);
