@@ -1,17 +1,36 @@
+import { lineHeight } from './editorState.js';
+
 const pool = [];
 
-export function getCanvas() {
-  return pool.length > 0 ? pool.pop() : document.createElement("canvas");
+export function getFromPool(width) {
+  let canvas;
+  if (pool.length > 0) {
+    canvas = pool.pop();
+  } else {
+    canvas = createNewCanvas();
+  }
+  
+  canvas.width = width;
+  canvas.height = lineHeight;
+  return canvas;
 }
 
-export function releaseCanvas(canvas) {
-  // // Garante que o canvas não está mais no DOM antes de reaproveitar
-  // if (canvas.parentNode) {
-  //   canvas.parentNode.removeChild(canvas);
-  // }
+export function returnToPool(canvas) {
+  if (canvas && canvas.parentNode) {
+    canvas.parentNode.removeChild(canvas);
+  }
+  if (canvas) {
+    pool.push(canvas);
+  }
+}
 
-  // // (Opcional: limpar estilo, conteúdo ou resetar contexto se quiser garantir estado neutro)
-  // canvas.width = 0;
-  // canvas.height = 0;
-  pool.push(canvas);
+function createNewCanvas() {
+  const canvas = document.createElement('canvas');
+  canvas.className = 'lineCanvas';
+  canvas.style.position = 'absolute';
+  return canvas;
+}
+
+export function getCanvasAt(index) {
+  return document.querySelector(`.lineCanvas[data-line="${index}"]`);
 }

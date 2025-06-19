@@ -9,13 +9,17 @@ import { editorContainer } from './editorState.js';
  */
 export function getVisibleLineRange(container, lineHeight, totalLines) {
   if (!container) return [0, 0];
+  
   const scrollTop = container?.scrollTop ?? 0;
   const visibleHeight = container.clientHeight;
-
-  const firstVisible = Math.floor(scrollTop / lineHeight);
+  
+  // Adiciona um buffer menor, apenas algumas linhas antes e depois
+  const buffer = 5; // 5 linhas de buffer
+  
+  const firstVisible = Math.max(0, Math.floor(scrollTop / lineHeight) - buffer);
   const lastVisible = Math.min(
     totalLines - 1,
-    Math.ceil((scrollTop + visibleHeight) / lineHeight)
+    Math.ceil((scrollTop + visibleHeight) / lineHeight) + buffer
   );
 
   return [firstVisible, lastVisible];

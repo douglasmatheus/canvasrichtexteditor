@@ -533,20 +533,58 @@ function setEditorContainer(el) {
   editorContainer = el;
 }
 ;// ./src/canvasPool.js
-var pool = [];
-function getCanvas() {
-  return pool.length > 0 ? pool.pop() : document.createElement("canvas");
-}
-function releaseCanvas(canvas) {
-  // // Garante que o canvas não está mais no DOM antes de reaproveitar
-  // if (canvas.parentNode) {
-  //   canvas.parentNode.removeChild(canvas);
-  // }
 
-  // // (Opcional: limpar estilo, conteúdo ou resetar contexto se quiser garantir estado neutro)
-  // canvas.width = 0;
-  // canvas.height = 0;
-  pool.push(canvas);
+var pool = [];
+function getFromPool(width) {
+  var canvas;
+  if (pool.length > 0) {
+    canvas = pool.pop();
+  } else {
+    canvas = createNewCanvas();
+  }
+  canvas.width = width;
+  canvas.height = lineHeight;
+  return canvas;
+}
+function returnToPool(canvas) {
+  if (canvas && canvas.parentNode) {
+    canvas.parentNode.removeChild(canvas);
+  }
+  if (canvas) {
+    pool.push(canvas);
+  }
+}
+function createNewCanvas() {
+  var canvas = document.createElement('canvas');
+  canvas.className = 'lineCanvas';
+  canvas.style.position = 'absolute';
+  return canvas;
+}
+function getCanvasAt(index) {
+  return document.querySelector(".lineCanvas[data-line=\"".concat(index, "\"]"));
+}
+;// ./src/cursorAnimation.js
+
+var cursorVisible = true;
+var lastBlink = performance.now();
+var blinkInterval = 500;
+function startCursorAnimation() {
+  function renderLoop(timestamp) {
+    if (timestamp - lastBlink >= blinkInterval) {
+      cursorVisible = !cursorVisible;
+      drawCursor();
+      lastBlink = timestamp;
+    }
+    requestAnimationFrame(renderLoop);
+  }
+  requestAnimationFrame(renderLoop);
+}
+function getCursorVisibility() {
+  return cursorVisible;
+}
+function setCursorVisibility(visible) {
+  cursorVisible = visible;
+  lastBlink = performance.now();
 }
 ;// ./src/editorCanvas.js
 
@@ -554,66 +592,130 @@ function releaseCanvas(canvas) {
 
 var canvasMap = new Map(); // Relaciona índices de linha com seus canvases
 
+function cleanCanvas(canvas) {
+  var ctx = canvas.getContext('2d');
+  // Salva a largura e altura originais
+  var width = canvas.width;
+  var height = canvas.height;
+
+  // Reset completo do canvas
+  ctx.clearRect(0, 0, width, height);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+  // Redefine o tamanho para forçar uma limpeza completa
+  canvas.width = width;
+  canvas.height = height;
+
+  // Reinicia as configurações padrão
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'left';
+  ctx.lineWidth = 1;
+}
+
 // Cria (ou reaproveita) e posiciona o canvas da linha
 function createCanvasForLine(lineIndex) {
-  var text = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : lines[lineIndex];
-  if (canvasMap.has(lineIndex)) return; // Já criado
-
-  var canvas = getCanvas();
-  canvas.classList.add('lineCanvas');
-  canvas.width = 800;
-  canvas.height = lineHeight;
+  if (canvasMap.has(lineIndex)) {
+    // Se já existe, limpa e redesenha
+    var existingCanvas = canvasMap.get(lineIndex);
+    cleanCanvas(existingCanvas);
+    drawLine(existingCanvas, lineIndex, lines.value[lineIndex]);
+    return;
+  }
+  var container = document.getElementById('editorContainer');
+  var canvas = getFromPool(container.clientWidth);
+  cleanCanvas(canvas);
+  canvas.dataset.line = lineIndex;
   canvas.style.top = "".concat(lineIndex * lineHeight, "px");
-  drawLine(canvas, lineIndex, text);
-  document.getElementById('editorContainer').appendChild(canvas);
+  drawLine(canvas, lineIndex, lines.value[lineIndex]);
+  container.appendChild(canvas);
   canvasMap.set(lineIndex, canvas);
 }
 
 // Redesenha o texto da linha em seu canvas
 function drawLine(canvas, lineIndex, text) {
+  cleanCanvas(canvas);
   var ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.font = font;
-  ctx.textBaseline = 'top';
   ctx.fillStyle = '#000';
-  ctx.fillText(text, marginLeft, 0);
+  ctx.fillText(text || '', marginLeft, 0);
 }
 
 // Remove canvas de linha e libera para reuso
 function removeCanvas(lineIndex) {
   var canvas = canvasMap.get(lineIndex);
   if (canvas) {
-    canvas.remove();
-    releaseCanvas(canvas);
+    cleanCanvas(canvas);
+    returnToPool(canvas);
     canvasMap["delete"](lineIndex);
   }
 }
 
 // Redesenha a linha ativa e o cursor (se visível)
-function drawCursor(isVisible) {
-  var canvas = canvasMap.get(activeLineIndex);
-  if (!canvas) return;
+function drawCursor() {
+  var forceVisible = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : null;
+  var lineIdx = activeLineIndex.value;
+  var canvas = canvasMap.get(lineIdx);
+  if (!canvas) {
+    createCanvasForLine(lineIdx);
+    return;
+  }
   var ctx = canvas.getContext('2d');
-  var lineText = lines[activeLineIndex];
-  var cursorPos = cursorIndex;
-  var textBeforeCursor = lineText.slice(0, cursorPos);
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawLine(canvas, activeLineIndex, lineText);
+  var lineText = lines.value[lineIdx];
+
+  // Limpa e redesenha a linha
+  cleanCanvas(canvas);
+  drawLine(canvas, lineIdx, lineText);
+
+  // Decide se o cursor deve ser visível
+  var isVisible = forceVisible !== null ? forceVisible : getCursorVisibility();
   if (isVisible) {
+    var textBeforeCursor = lineText.slice(0, cursorIndex.value);
     var cursorX = ctx.measureText(textBeforeCursor).width + marginLeft;
+
+    // Desenha o cursor com anti-aliasing
     ctx.beginPath();
-    ctx.moveTo(cursorX, 0);
-    ctx.lineTo(cursorX, lineHeight);
+    ctx.moveTo(Math.floor(cursorX) + 0.5, 4);
+    ctx.lineTo(Math.floor(cursorX) + 0.5, lineHeight - 4);
     ctx.strokeStyle = '#000';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1;
     ctx.stroke();
   }
 }
 
 // Atualiza apenas a posição visual do cursor (opcional se for fazer cursor flutuante)
 function updateCursorPosition() {
-  // No modelo atual, o cursor está embutido no canvas via drawCursor
-  // Se quiser usar um elemento separado futuramente, esse método pode ser útil
+  var canvas = canvasMap.get(activeLineIndex.value);
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  ctx.font = font;
+  var textBeforeCursor = lines.value[activeLineIndex.value].slice(0, cursorIndex.value);
+  return marginLeft + ctx.measureText(textBeforeCursor).width;
+}
+function updateCanvasPositionsFromIndex(startIndex) {
+  for (var i = startIndex; i < lines.value.length; i++) {
+    var canvas = canvasMap.get(i);
+    if (canvas) {
+      canvas.style.top = "".concat(i * lineHeight, "px");
+      // Limpa e redesenha a linha
+      var ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawLine(canvas, i, lines.value[i]);
+    }
+  }
+}
+function ensureLineVisible(lineIndex) {
+  var container = document.getElementById('editorContainer');
+  var lineTop = lineIndex * lineHeight;
+  var lineBottom = (lineIndex + 1) * lineHeight;
+  var scrollTop = container.scrollTop;
+  var visibleHeight = container.clientHeight;
+  if (lineTop < scrollTop) {
+    // Linha está acima da área visível
+    container.scrollTop = lineTop;
+  } else if (lineBottom > scrollTop + visibleHeight) {
+    // Linha está abaixo da área visível
+    container.scrollTop = lineBottom - visibleHeight;
+  }
 }
 ;// ./src/utils.js
 
@@ -630,8 +732,12 @@ function getVisibleLineRange(container, lineHeight, totalLines) {
   if (!container) return [0, 0];
   var scrollTop = (_container$scrollTop = container === null || container === void 0 ? void 0 : container.scrollTop) !== null && _container$scrollTop !== void 0 ? _container$scrollTop : 0;
   var visibleHeight = container.clientHeight;
-  var firstVisible = Math.floor(scrollTop / lineHeight);
-  var lastVisible = Math.min(totalLines - 1, Math.ceil((scrollTop + visibleHeight) / lineHeight));
+
+  // Adiciona um buffer menor, apenas algumas linhas antes e depois
+  var buffer = 5; // 5 linhas de buffer
+
+  var firstVisible = Math.max(0, Math.floor(scrollTop / lineHeight) - buffer);
+  var lastVisible = Math.min(totalLines - 1, Math.ceil((scrollTop + visibleHeight) / lineHeight) + buffer);
   return [firstVisible, lastVisible];
 }
 ;// ./src/render.js
@@ -641,6 +747,7 @@ function _unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) 
 function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
 function _iterableToArrayLimit(r, l) { var t = null == r ? null : "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (null != t) { var e, n, i, u, a = [], f = !0, o = !1; try { if (i = (t = t.call(r)).next, 0 === l) { if (Object(t) !== t) return; f = !1; } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = !0); } catch (r) { o = !0, n = r; } finally { try { if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u)) return; } finally { if (o) throw n; } } return a; } }
 function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
+// import { canvasPool, createCanvasForLine, removeCanvas } from './canvasPool.js';
 
 
 
@@ -650,34 +757,78 @@ function renderVisibleLines(container, lineHeight, totalLines) {
     _getVisibleLineRange2 = _slicedToArray(_getVisibleLineRange, 2),
     first = _getVisibleLineRange2[0],
     last = _getVisibleLineRange2[1];
+
+  // Se não houver mudança no range visível e não for uma renderização forçada, não faz nada
   if (first === lastRenderedRange[0] && last === lastRenderedRange[1]) return;
-  lastRenderedRange = [first, last];
-  for (var i = first; i <= last; i++) {
-    createCanvasForLine(i, lines[i]);
-  }
-  for (var _i = 0; _i < lines.length; _i++) {
-    if (_i < first || _i > last) {
-      removeCanvas(_i);
+
+  // Remove todos os canvas existentes na área visível
+  var existingCanvases = container.querySelectorAll('.lineCanvas');
+  existingCanvases.forEach(function (canvas) {
+    var lineIndex = parseInt(canvas.dataset.line);
+    if (lineIndex >= first - 5 && lineIndex <= last + 5) {
+      removeCanvas(lineIndex);
     }
+  });
+
+  // Cria canvas para linhas visíveis
+  for (var i = first; i <= last; i++) {
+    createCanvasForLine(i);
   }
+  lastRenderedRange = [first, last];
 }
 function updateLine(index) {
-  drawLine(index, lines[index]);
+  var canvas = document.querySelector(".lineCanvas[data-line=\"".concat(index, "\"]"));
+  if (canvas) {
+    drawLine(canvas, index, lines.value[index]);
+  }
+}
+
+// Função para limpar todos os canvas (útil em casos de reinicialização)
+function clearAllCanvases() {
+  var container = document.getElementById('editorContainer');
+  if (!container) return;
+  var canvases = container.querySelectorAll('.lineCanvas');
+  canvases.forEach(function (canvas) {
+    var lineIndex = parseInt(canvas.dataset.line);
+    removeCanvas(lineIndex);
+  });
+  lastRenderedRange = [null, null];
 }
 ;// ./src/initEditor.js
+function initEditor_slicedToArray(r, e) { return initEditor_arrayWithHoles(r) || initEditor_iterableToArrayLimit(r, e) || initEditor_unsupportedIterableToArray(r, e) || initEditor_nonIterableRest(); }
+function initEditor_nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
+function initEditor_unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return initEditor_arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? initEditor_arrayLikeToArray(r, a) : void 0; } }
+function initEditor_arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
+function initEditor_iterableToArrayLimit(r, l) { var t = null == r ? null : "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (null != t) { var e, n, i, u, a = [], f = !0, o = !1; try { if (i = (t = t.call(r)).next, 0 === l) { if (Object(t) !== t) return; f = !1; } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = !0); } catch (r) { o = !0, n = r; } finally { try { if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u)) return; } finally { if (o) throw n; } } return a; } }
+function initEditor_arrayWithHoles(r) { if (Array.isArray(r)) return r; }
+
+
+
 
 
 
 
 function initEditor(container) {
+  // Limpa qualquer estado anterior
+  clearAllCanvases();
   setEditorContainer(container);
   var spacer = document.createElement("div");
-  spacer.style.height = "".concat(lines.length * lineHeight, "px"); // Usando o lineHeight de editorState
+  spacer.style.height = "".concat(lines.value.length * lineHeight, "px");
   container.appendChild(spacer);
-  var totalLines = lines.value.length;
-  renderVisibleLines(container, lineHeight, totalLines);
+  renderVisibleLines(container, lineHeight, lines.value.length);
   refreshCursor();
-  container.addEventListener("scroll", renderVisibleLines);
+  startCursorAnimation();
+
+  // Usa um debounce para o evento de scroll para melhor performance
+  var scrollTimeout;
+  container.addEventListener("scroll", function () {
+    if (scrollTimeout) {
+      clearTimeout(scrollTimeout);
+    }
+    scrollTimeout = setTimeout(function () {
+      renderVisibleLines(container, lineHeight, lines.value.length);
+    }, 10); // 10ms de delay
+  });
   document.addEventListener("keydown", handleKeyDown);
 }
 function handleKeyDown(e) {
@@ -705,41 +856,96 @@ function handleKeyDown(e) {
 }
 function handleTextInput(_char) {
   var lineIdx = activeLineIndex.value;
-  var currentLine = lines[lineIdx];
+  var currentLine = lines.value[lineIdx];
   var cursorPos = cursorIndex.value;
-  lines[lineIdx] = currentLine.slice(0, cursorPos) + _char + currentLine.slice(cursorPos);
+  lines.value[lineIdx] = currentLine.slice(0, cursorPos) + _char + currentLine.slice(cursorPos);
   setCursorIndex(cursorPos + 1);
   updateLine(lineIdx);
   refreshCursor();
 }
 function handleBackspace() {
   var lineIdx = activeLineIndex.value;
-  var currentLine = lines[lineIdx];
   var cursorPos = cursorIndex.value;
+  var container = document.getElementById("editorContainer");
   if (cursorPos > 0) {
-    lines[lineIdx] = currentLine.slice(0, cursorPos - 1) + currentLine.slice(cursorPos);
+    var currentLine = lines.value[lineIdx];
+    lines.value[lineIdx] = currentLine.slice(0, cursorPos - 1) + currentLine.slice(cursorPos);
     setCursorIndex(cursorPos - 1);
     updateLine(lineIdx);
     refreshCursor();
+  } else if (lineIdx > 0) {
+    // Guarda a posição atual da rolagem
+    var currentScrollTop = container.scrollTop;
+
+    // Mesclar com a linha anterior
+    var previousLine = lines.value[lineIdx - 1];
+    var _currentLine = lines.value[lineIdx];
+    var mergedLine = previousLine + _currentLine;
+
+    // Atualiza as linhas
+    lines.value.splice(lineIdx - 1, 2, mergedLine);
+
+    // Limpa os canvas afetados
+    removeCanvas(lineIdx - 1);
+    removeCanvas(lineIdx);
+
+    // Atualiza índices
+    setActiveLineIndex(lineIdx - 1);
+    setCursorIndex(previousLine.length);
+
+    // Atualiza o spacer
+    var spacer = container.lastElementChild;
+    spacer.style.height = "".concat(lines.value.length * lineHeight, "px");
+
+    // Renderiza novamente as linhas visíveis
+    renderVisibleLines(container, lineHeight, lines.value.length);
+
+    // Garante que o cursor seja desenhado
+    refreshCursor();
+
+    // Restaura a posição da rolagem
+    container.scrollTop = currentScrollTop;
   }
 }
 function handleEnter() {
   var lineIdx = activeLineIndex.value;
-  var currentLine = lines[lineIdx];
+  var currentLine = lines.value[lineIdx];
   var cursorPos = cursorIndex.value;
+  var container = document.getElementById("editorContainer");
+
+  // Guarda a posição atual da rolagem
+  var currentScrollTop = container.scrollTop;
+
+  // Divide a linha atual em duas
   var before = currentLine.slice(0, cursorPos);
   var after = currentLine.slice(cursorPos);
-  lines.splice(lineIdx, 1, before, after);
+  lines.value.splice(lineIdx, 1, before, after);
+
+  // Limpa todos os canvas existentes na área visível
+  var _getVisibleLineRange = getVisibleLineRange(container, lineHeight, lines.value.length),
+    _getVisibleLineRange2 = initEditor_slicedToArray(_getVisibleLineRange, 2),
+    first = _getVisibleLineRange2[0],
+    last = _getVisibleLineRange2[1];
+  for (var i = first; i <= last; i++) {
+    removeCanvas(i);
+  }
+
+  // Atualiza índices
   setCursorIndex(0);
   setActiveLineIndex(lineIdx + 1);
-  createCanvasForLine(lineIdx + 1, lines[lineIdx + 1]);
-  updateLine(lineIdx);
-  updateLine(lineIdx + 1);
+
+  // Atualiza o spacer
+  var spacer = container.lastElementChild;
+  spacer.style.height = "".concat(lines.value.length * lineHeight, "px");
+
+  // Renderiza novamente as linhas visíveis
+  renderVisibleLines(container, lineHeight, lines.value.length);
+
+  // Garante que o cursor seja desenhado
   refreshCursor();
 
-  // Movendo a rolagem para a linha ativa
-  var container = document.getElementById("editorContainer");
-  container.scrollTop = (lineIdx + 1) * getLineHeight(); // Usando lineHeight
+  // Garante que a nova linha esteja visível
+  ensureLineVisible(lineIdx + 1);
 }
 function handleArrowKey(direction) {
   var lineIdx = activeLineIndex.value;
@@ -748,13 +954,13 @@ function handleArrowKey(direction) {
     case "ArrowUp":
       if (lineIdx > 0) {
         setActiveLineIndex(lineIdx - 1);
-        setCursorIndex(Math.min(cursorPos, lines[lineIdx - 1].length));
+        setCursorIndex(Math.min(cursorPos, lines.value[lineIdx - 1].length));
       }
       break;
     case "ArrowDown":
-      if (lineIdx < lines.length - 1) {
+      if (lineIdx < lines.value.length - 1) {
         setActiveLineIndex(lineIdx + 1);
-        setCursorIndex(Math.min(cursorPos, lines[lineIdx + 1].length));
+        setCursorIndex(Math.min(cursorPos, lines.value[lineIdx + 1].length));
       }
       break;
     case "ArrowLeft":
@@ -762,13 +968,13 @@ function handleArrowKey(direction) {
         setCursorIndex(cursorPos - 1);
       } else if (lineIdx > 0) {
         setActiveLineIndex(lineIdx - 1);
-        setCursorIndex(lines[lineIdx - 1].length);
+        setCursorIndex(lines.value[lineIdx - 1].length);
       }
       break;
     case "ArrowRight":
-      if (cursorPos < lines[lineIdx].length) {
+      if (cursorPos < lines.value[lineIdx].length) {
         setCursorIndex(cursorPos + 1);
-      } else if (lineIdx < lines.length - 1) {
+      } else if (lineIdx < lines.value.length - 1) {
         setActiveLineIndex(lineIdx + 1);
         setCursorIndex(0);
       }
@@ -787,4 +993,6 @@ function refreshCursor() {
 
 
 
-export { activeLineIndex, createCanvasForLine, cursorIndex, drawCursor, getVisibleLineRange, initEditor, lines, renderVisibleLines, setActiveLineIndex, setCursorIndex, updateCursorPosition, updateLine };
+
+
+export { activeLineIndex, createCanvasForLine, cursorIndex, drawCursor, getCanvasAt, getCursorVisibility, getFromPool, getVisibleLineRange, initEditor, lines, renderVisibleLines, returnToPool, setActiveLineIndex, setCursorIndex, startCursorAnimation, updateCanvasPositionsFromIndex, updateCursorPosition, updateLine };
